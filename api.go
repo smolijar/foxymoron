@@ -1,20 +1,15 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
-	"log"
-	"net/http"
 	"regexp"
 	"time"
 
-	"github.com/gorilla/mux"
+	"github.com/gin-gonic/gin"
 )
 
-func getProjects(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
+func getProjectsController(c *gin.Context) {
 	projects := fetchProjects()
-	json.NewEncoder(w).Encode(projects)
+	c.JSON(200, projects)
 }
 
 func parseIsoDate(date string) time.Time {
@@ -26,40 +21,18 @@ func parseIsoDate(date string) time.Time {
 	return t
 }
 
-func getQuery(r *http.Request, key string) string {
-	keys, ok := r.URL.Query()[key]
-	if !ok || len(keys) == 0 {
-		return ""
-	}
-	return keys[0]
-}
-
-func getCommits(w http.ResponseWriter, r *http.Request) {
-	fromQ := getQuery(r, "from")
-	toQ := getQuery(r, "to")
-	messageQ := getQuery(r, "message")
-	from := parseIsoDate(fromQ)
-	to := parseIsoDate(toQ)
-	message, _ := regexp.Compile(messageQ)
-
-	w.Header().Set("Content-Type", "application/json")
+func getCommitsController(c *gin.Context) {
+	from := parseIsoDate(c.Query("from"))
+	to := parseIsoDate(c.Query("to"))
+	message, _ := regexp.Compile(c.Query("message"))
 	commits := fetchCommits(&FetchCommitsOptions{from: &from, to: &to, withStats: true, messageRegex: message})
-	json.NewEncoder(w).Encode(commits)
+	c.JSON(200, commits)
 }
 
-func foo(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("sometihgn")
-	x, _ := r.URL.Query()["x"]
-	log.Println(x)
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(x)
-}
+func createRouter() *gin.Engine {
+	r := gin.Default()
 
-func createRouter() *mux.Router {
-	router := mux.NewRouter()
-	router.HandleFunc("/projects", getProjects).Methods("GET")
-	router.HandleFunc("/commits", getCommits).Methods("GET")
-	router.HandleFunc("/bar", foo).Methods("GET")
-
-	return router
+	r.GET("/projects", getProjectsController)
+	r.GET("/commits", getCommitsController)
+	return r
 }
