@@ -2,13 +2,12 @@ package main
 
 import (
 	"log"
-	"net/http"
 	"strconv"
 )
 
 func main() {
 	readConfig()
-	port := 8000
+	port := config.port
 	log.Printf("Startig server on port %v", port)
-	http.ListenAndServe(":"+strconv.Itoa(port), createRouter())
+	createRouter().Run(":" + strconv.Itoa(port))
 }
