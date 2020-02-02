@@ -14,20 +14,27 @@ func getClient() *gitlab.Client {
 	return git
 }
 
-var projects []*gitlab.Project = nil
+var projectsMap map[int]*gitlab.Project = nil
 
-func fetchProjects() []*gitlab.Project {
-	// TODO: add mutex to prevent duplicate fetchers
-	if projects != nil {
-		log.Printf("Got %v projects from cache", len(projects))
-		return projects
+func fetchProjects() (res []*gitlab.Project) {
+	for _, project := range fetchProjectsMap() {
+		res = append(res, project)
 	}
-	newProjects := []*gitlab.Project{}
+	return
+}
+
+func fetchProjectsMap() map[int]*gitlab.Project {
+	// TODO: add mutex to prevent duplicate fetchers
+	if projectsMap != nil {
+		log.Printf("Got %v projects from cache", len(projectsMap))
+		return projectsMap
+	}
+	newProjects := map[int]*gitlab.Project{}
 	maxPage := 1
 	projectsChannel := make(chan []*gitlab.Project)
 	collectResults := func() {
 		for _, p := range <-projectsChannel {
-			newProjects = append(newProjects, p)
+			newProjects[p.ID] = p
 		}
 	}
 	for p := 1; true; p++ {
@@ -52,9 +59,9 @@ func fetchProjects() []*gitlab.Project {
 
 	}
 	collectResults()
-	projects = newProjects
-	log.Printf("Fetched %v projects from GitLab", len(projects))
-	return projects
+	projectsMap = newProjects
+	log.Printf("Fetched %v projects from GitLab", len(projectsMap))
+	return projectsMap
 }
 
 type FetchCommitsOptions struct {
@@ -71,7 +78,7 @@ func fetchCommits(opts *FetchCommitsOptions) []*gitlab.Commit {
 		All:       gitlab.Bool(opts.withStats),
 		WithStats: gitlab.Bool(true),
 	}
-	projects := fetchProjects()
+	projects := fetchProjectsMap()
 	commitsChan := make(chan []*gitlab.Commit)
 	for _, p := range projects {
 		proj := p
@@ -107,16 +114,16 @@ type ProjectWithCommits struct {
 }
 
 func groupByProject(commits []*gitlab.Commit) (res []*ProjectWithCommits) {
-	projects := map[int][]*gitlab.Commit{}
+	projectsWithCommits := map[int][]*gitlab.Commit{}
 	for _, c := range commits {
-		if projects[c.ProjectID] == nil {
-			projects[c.ProjectID] = []*gitlab.Commit{}
+		if projectsWithCommits[c.ProjectID] == nil {
+			projectsWithCommits[c.ProjectID] = []*gitlab.Commit{}
 		}
-		projects[c.ProjectID] = append(projects[c.ProjectID], c)
+		projectsWithCommits[c.ProjectID] = append(projectsWithCommits[c.ProjectID], c)
 	}
-	for k, v := range projects {
-		// TODO include whole project
-		res = append(res, &ProjectWithCommits{&gitlab.Project{ID: k}, v})
+	projectsMap := fetchProjectsMap()
+	for pid, commits := range projectsWithCommits {
+		res = append(res, &ProjectWithCommits{projectsMap[pid], commits})
 	}
 	return
 }
