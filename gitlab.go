@@ -19,26 +19,39 @@ var projects []*gitlab.Project = nil
 func fetchProjects() []*gitlab.Project {
 	// TODO: add mutex to prevent duplicate fetchers
 	if projects != nil {
-		log.Println("Getting projects from cache")
+		log.Printf("Got %v projects from cache", len(projects))
 		return projects
 	}
 	newProjects := []*gitlab.Project{}
-	for p := 1; true; p++ {
-		ps, res, _ := getClient().Projects.ListProjects(&gitlab.ListProjectsOptions{
-			Archived: gitlab.Bool(false),
-			ListOptions: gitlab.ListOptions{
-				PerPage: 100,
-				Page:    p,
-			},
-		})
-		for _, p := range ps {
+	maxPage := 1
+	projectsChannel := make(chan []*gitlab.Project)
+	collectResults := func() {
+		for _, p := range <-projectsChannel {
 			newProjects = append(newProjects, p)
 		}
-		if p >= res.TotalPages {
+	}
+	for p := 1; true; p++ {
+		go func(page int) {
+			log.Printf("Making project list request %v/%v\n", page, maxPage)
+			ps, res, _ := getClient().Projects.ListProjects(&gitlab.ListProjectsOptions{
+				Archived: gitlab.Bool(false),
+				ListOptions: gitlab.ListOptions{
+					PerPage: 100,
+					Page:    p,
+				},
+			})
+			maxPage = res.TotalPages
+			projectsChannel <- ps
+		}(p)
+		if p == 1 {
+			collectResults()
+		}
+		if p >= maxPage {
 			break
 		}
 
 	}
+	collectResults()
 	projects = newProjects
 	log.Printf("Fetched %v projects from GitLab", len(projects))
 	return projects
