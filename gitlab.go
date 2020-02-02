@@ -87,3 +87,23 @@ func fetchCommits(opts *FetchCommitsOptions) []*gitlab.Commit {
 	log.Printf("Returning %v commits - Filtered from %v retrieved commits from %v projects for range <%v, %v>", retrievedCommitsN, len(commits), len(projects), opts.from, opts.to)
 	return commits
 }
+
+type ProjectWithCommits struct {
+	Project *gitlab.Project  `json:"project"`
+	Commits []*gitlab.Commit `json:"commits"`
+}
+
+func groupByProject(commits []*gitlab.Commit) (res []*ProjectWithCommits) {
+	projects := map[int][]*gitlab.Commit{}
+	for _, c := range commits {
+		if projects[c.ProjectID] == nil {
+			projects[c.ProjectID] = []*gitlab.Commit{}
+		}
+		projects[c.ProjectID] = append(projects[c.ProjectID], c)
+	}
+	for k, v := range projects {
+		// TODO include whole project
+		res = append(res, &ProjectWithCommits{&gitlab.Project{ID: k}, v})
+	}
+	return
+}
