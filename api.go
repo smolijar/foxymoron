@@ -29,10 +29,19 @@ func getCommitsController(c *gin.Context) {
 	c.JSON(200, commits)
 }
 
+func getStatisticsController(c *gin.Context) {
+	from := parseIsoDate(c.Query("from"))
+	to := parseIsoDate(c.Query("to"))
+	stats := commitsToStats(fetchCommits(&FetchCommitsOptions{from: &from, to: &to, withStats: true, messageRegex: nil}))
+
+	c.JSON(200, stats)
+}
+
 func createRouter() *gin.Engine {
 	r := gin.Default()
 
 	r.GET("/projects", getProjectsController)
 	r.GET("/commits", getCommitsController)
+	r.GET("/statistics", getStatisticsController)
 	return r
 }

@@ -1,8 +1,12 @@
 package main
 
 import (
+	"encoding/json"
+	"io/ioutil"
 	"log"
+	"net/http"
 	"regexp"
+	"sort"
 	"time"
 
 	"github.com/xanzy/go-gitlab"
@@ -44,7 +48,7 @@ func fetchProjectsMap() map[int]*gitlab.Project {
 				Archived: gitlab.Bool(false),
 				ListOptions: gitlab.ListOptions{
 					PerPage: 100,
-					Page:    p,
+					Page:    page,
 				},
 			})
 			maxPage = res.TotalPages
@@ -97,7 +101,7 @@ func fetchCommits(opts *FetchCommitsOptions) []*gitlab.Commit {
 		retrievedCommitsN++
 		// COOL: use `<-commitsChan` like an expression without assignment
 		for _, c := range <-commitsChan {
-			if opts.messageRegex.MatchString(c.Message) {
+			if opts.messageRegex == nil || opts.messageRegex.MatchString(c.Message) {
 				commits = append(commits, c)
 			}
 		}
@@ -124,6 +128,81 @@ func groupByProject(commits []*gitlab.Commit) (res []*ProjectWithCommits) {
 	projectsMap := fetchProjectsMap()
 	for pid, commits := range projectsWithCommits {
 		res = append(res, &ProjectWithCommits{projectsMap[pid], commits})
+	}
+	return
+}
+
+type Stats struct {
+	Count          int
+	MergeCommits   int
+	RefsPrefixes   map[string]int
+	Issues         map[string]int
+	Openers        map[string]int
+	WithReferences int
+	WithGitmoji    int
+}
+
+func getGitmojis() (gitmojis []string, err error) {
+	url := `https://raw.githubusercontent.com/carloscuesta/gitmoji/master/src/data/gitmojis.json`
+	res, getErr := http.Get(url)
+	if getErr != nil {
+		return nil, getErr
+	}
+	body, readErr := ioutil.ReadAll(res.Body)
+	if readErr != nil {
+		return nil, readErr
+	}
+
+	gitmojiResponse := struct {
+		Gitmojis []struct {
+			Emoji string `json:"emoji"`
+		} `json:"gitmojis"`
+	}{}
+
+	jsonErr := json.Unmarshal(body, &gitmojiResponse)
+	if jsonErr != nil {
+		return nil, jsonErr
+	}
+	for _, gm := range gitmojiResponse.Gitmojis {
+		gitmojis = append(gitmojis, gm.Emoji)
+	}
+	sort.Strings(gitmojis)
+	return
+}
+
+func commitsToStats(commits []*gitlab.Commit) (stats Stats) {
+	gitmojis, _ := getGitmojis()
+	stats.Count = len(commits)
+	stats.RefsPrefixes = map[string]int{}
+	stats.Issues = map[string]int{}
+	stats.Openers = map[string]int{}
+	refernceMatcher := regexp.MustCompile(`^|\n(.+)(#[0-9]+)`)
+	openerMatcher := regexp.MustCompile(`^(\S+)\s`)
+	for _, c := range commits {
+		stats.Count++
+		if len(c.ParentIDs) > 1 {
+			stats.MergeCommits++
+		}
+		refs := refernceMatcher.FindAllStringSubmatch(c.Message, -1)
+		if refs != nil && len(refs) > 1 && len(refs[1]) > 2 {
+			prefix := refs[1][1]
+			stats.RefsPrefixes[prefix]++
+			stats.WithReferences++
+			issue := refs[1][2]
+			stats.Issues[issue]++
+			log.Println(prefix, issue)
+		}
+
+		openers := openerMatcher.FindAllStringSubmatch(c.Message, -1)
+		if openers != nil && len(openers) > 0 && len(openers[0]) > 1 {
+			opener := openers[0][1]
+			stats.Openers[opener]++
+			i := sort.SearchStrings(gitmojis, opener)
+			if i < len(gitmojis) && gitmojis[i] == opener {
+				stats.WithGitmoji++
+			}
+		}
+
 	}
 	return
 }
