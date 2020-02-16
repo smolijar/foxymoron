@@ -1,13 +1,14 @@
 package main
 
 import (
-	"log"
-	"strconv"
+	"github.com/grissius/foxymoron/internal/api"
+	"github.com/grissius/foxymoron/internal/config"
 )
 
+func init() {
+	config.LoadConfig()
+}
+
 func main() {
-	readConfig()
-	port := config.port
-	log.Printf("Startig server on port %v", port)
-	createRouter().Run(":" + strconv.Itoa(port))
+	api.RunAt(config.Config.Port)
 }

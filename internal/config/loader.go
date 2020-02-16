@@ -1,4 +1,4 @@
-package main
+package config
 
 import (
 	"flag"
@@ -6,15 +6,13 @@ import (
 	"os"
 )
 
-type Config struct {
-	token string
-	url   string
-	port  int
+var Config struct {
+	Token string
+	Url   string
+	Port  int
 }
 
-var config Config
-
-func readConfig() Config {
+func LoadConfig() {
 	// COOL: having built in param parsing is just cool
 	token := flag.String("token", "", "GitLab API token")
 	url := flag.String("url", "http://gitlab.com", "GitLab URL")
@@ -31,6 +29,7 @@ func readConfig() Config {
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
-	config = Config{*token, *url, *port}
-	return config
+	Config.Token = *token
+	Config.Url = *url
+	Config.Port = *port
 }

@@ -1,4 +1,4 @@
-package main
+package core
 
 import (
 	"encoding/json"
@@ -9,18 +9,63 @@ import (
 	"sort"
 	"time"
 
+	"github.com/grissius/foxymoron/internal/config"
 	"github.com/xanzy/go-gitlab"
 )
 
 func getClient() *gitlab.Client {
-	git := gitlab.NewClient(nil, config.token)
-	git.SetBaseURL(config.url)
+	git := gitlab.NewClient(nil, config.Config.Token)
+	git.SetBaseURL(config.Config.Url)
 	return git
 }
 
 var projectsMap map[int]*gitlab.Project = nil
 
-func fetchProjects() (res []*gitlab.Project) {
+type FetchCommitsOptions struct {
+	From         *time.Time
+	To           *time.Time
+	WithStats    bool
+	MessageRegex *regexp.Regexp
+}
+
+func FetchCommits(opts *FetchCommitsOptions) []*gitlab.Commit {
+	opt := &gitlab.ListCommitsOptions{
+		Since:     opts.From,
+		Until:     opts.To,
+		All:       gitlab.Bool(opts.WithStats),
+		WithStats: gitlab.Bool(true),
+	}
+	projects := fetchProjectsMap()
+	commitsChan := make(chan []*gitlab.Commit)
+	for _, p := range projects {
+		proj := p
+		// COOL: create ad-hoc blocking-to-async functions
+		go func() {
+			commits, _, _ := getClient().Commits.ListCommits(proj.ID, opt)
+			for _, c := range commits {
+				c.ProjectID = proj.ID
+			}
+			commitsChan <- commits
+		}()
+	}
+	commits := []*gitlab.Commit{}
+	retrievedCommitsN := 0
+	for i := 0; i < len(projects); i++ {
+		retrievedCommitsN++
+		// COOL: use `<-commitsChan` like an expression without assignment
+		for _, c := range <-commitsChan {
+			if opts.MessageRegex == nil || opts.MessageRegex.MatchString(c.Message) {
+				commits = append(commits, c)
+			}
+		}
+	}
+	// COOL: you can use default logger from `log` and it outputs by default `2020/01/11 17:35:28 Retireved ...`
+	// COOL: you can use %v for default formatting
+	log.Printf("Returning %v commits - Filtered from %v retrieved commits from %v projects for range <%v, %v>", retrievedCommitsN, len(commits), len(projects), opts.From, opts.To)
+	return commits
+}
+
+func FetchProjects() (res []*gitlab.Project) {
 	for _, project := range fetchProjectsMap() {
 		res = append(res, project)
 	}
@@ -66,50 +111,6 @@ func fetchProjectsMap() map[int]*gitlab.Project {
 	projectsMap = newProjects
 	log.Printf("Fetched %v projects from GitLab", len(projectsMap))
 	return projectsMap
-}
-
-type FetchCommitsOptions struct {
-	from         *time.Time
-	to           *time.Time
-	withStats    bool
-	messageRegex *regexp.Regexp
-}
-
-func fetchCommits(opts *FetchCommitsOptions) []*gitlab.Commit {
-	opt := &gitlab.ListCommitsOptions{
-		Since:     opts.from,
-		Until:     opts.to,
-		All:       gitlab.Bool(opts.withStats),
-		WithStats: gitlab.Bool(true),
-	}
-	projects := fetchProjectsMap()
-	commitsChan := make(chan []*gitlab.Commit)
-	for _, p := range projects {
-		proj := p
-		// COOL: create ad-hoc blocking-to-async functions
-		go func() {
-			commits, _, _ := getClient().Commits.ListCommits(proj.ID, opt)
-			for _, c := range commits {
-				c.ProjectID = proj.ID
-			}
-			commitsChan <- commits
-		}()
-	}
-	commits := []*gitlab.Commit{}
-	retrievedCommitsN := 0
-	for i := 0; i < len(projects); i++ {
-		retrievedCommitsN++
-		// COOL: use `<-commitsChan` like an expression without assignment
-		for _, c := range <-commitsChan {
-			if opts.messageRegex == nil || opts.messageRegex.MatchString(c.Message) {
-				commits = append(commits, c)
-			}
-		}
-	}
-	// COOL: you can use default logger from `log` and it outputs by default `2020/01/11 17:35:28 Retireved ...`
-	// COOL: you can use %v for default formatting
-	log.Printf("Returning %v commits - Filtered from %v retrieved commits from %v projects for range <%v, %v>", retrievedCommitsN, len(commits), len(projects), opts.from, opts.to)
-	return commits
 }
 
 type ProjectWithCommits struct {
@@ -170,7 +171,7 @@ func getGitmojis() (gitmojis []string, err error) {
 	return
 }
 
-func commitsToStats(commits []*gitlab.Commit) (stats Stats) {
+func CommitsToStats(commits []*gitlab.Commit) (stats Stats) {
 	gitmojis, _ := getGitmojis()
 	stats.Count = len(commits)
 	stats.RefsPrefixes = map[string]int{}
