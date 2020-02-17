@@ -17,6 +17,12 @@ func parseIsoDate(date string) time.Time {
 	return t
 }
 
+// List projects
+// @Tags Projects
+// @Summary List all available unarchived projects
+// @Produce json
+// @Success 200 {array} gitlab.Project
+// @Router /projects [get]
 func getProjectsController(c *gin.Context) {
 	projects := core.FetchProjects()
 	c.JSON(200, projects)
