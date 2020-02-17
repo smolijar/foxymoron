@@ -9,13 +9,12 @@ import (
 	"sort"
 	"time"
 
-	"github.com/grissius/foxymoron/internal/config"
 	"github.com/xanzy/go-gitlab"
 )
 
-func getClient() *gitlab.Client {
-	git := gitlab.NewClient(nil, config.Config.Token)
-	git.SetBaseURL(config.Config.Url)
+func CreateClient(token *string, url *string) *gitlab.Client {
+	git := gitlab.NewClient(nil, *token)
+	git.SetBaseURL(*url)
 	return git
 }
 
@@ -28,20 +27,20 @@ type FetchCommitsOptions struct {
 	MessageRegex *regexp.Regexp
 }
 
-func FetchCommits(opts *FetchCommitsOptions) []*gitlab.Commit {
+func FetchCommits(client *gitlab.Client, opts *FetchCommitsOptions) []*gitlab.Commit {
 	opt := &gitlab.ListCommitsOptions{
 		Since:     opts.From,
 		Until:     opts.To,
 		All:       gitlab.Bool(opts.WithStats),
 		WithStats: gitlab.Bool(true),
 	}
-	projects := fetchProjectsMap()
+	projects := fetchProjectsMap(client)
 	commitsChan := make(chan []*gitlab.Commit)
 	for _, p := range projects {
 		proj := p
 		// COOL: create ad-hoc blocking-to-async functions
 		go func() {
-			commits, _, _ := getClient().Commits.ListCommits(proj.ID, opt)
+			commits, _, _ := client.Commits.ListCommits(proj.ID, opt)
 			for _, c := range commits {
 				c.ProjectID = proj.ID
 			}
@@ -65,14 +64,14 @@ func FetchCommits(opts *FetchCommitsOptions) []*gitlab.Commit {
 	return commits
 }
 
-func FetchProjects() (res []*gitlab.Project) {
-	for _, project := range fetchProjectsMap() {
+func FetchProjects(client *gitlab.Client) (res []*gitlab.Project) {
+	for _, project := range fetchProjectsMap(client) {
 		res = append(res, project)
 	}
 	return
 }
 
-func fetchProjectsMap() map[int]*gitlab.Project {
+func fetchProjectsMap(client *gitlab.Client) map[int]*gitlab.Project {
 	// TODO: add mutex to prevent duplicate fetchers
 	if projectsMap != nil {
 		log.Printf("Got %v projects from cache", len(projectsMap))
@@ -89,7 +88,7 @@ func fetchProjectsMap() map[int]*gitlab.Project {
 	for p := 1; true; p++ {
 		go func(page int) {
 			log.Printf("Making project list request %v/%v\n", page, maxPage)
-			ps, res, _ := getClient().Projects.ListProjects(&gitlab.ListProjectsOptions{
+			ps, res, _ := client.Projects.ListProjects(&gitlab.ListProjectsOptions{
 				Archived: gitlab.Bool(false),
 				ListOptions: gitlab.ListOptions{
 					PerPage: 100,
@@ -118,7 +117,7 @@ type ProjectWithCommits struct {
 	Commits []*gitlab.Commit `json:"commits"`
 }
 
-func groupByProject(commits []*gitlab.Commit) (res []*ProjectWithCommits) {
+func groupByProject(client *gitlab.Client, commits []*gitlab.Commit) (res []*ProjectWithCommits) {
 	projectsWithCommits := map[int][]*gitlab.Commit{}
 	for _, c := range commits {
 		if projectsWithCommits[c.ProjectID] == nil {
@@ -126,7 +125,7 @@ func groupByProject(commits []*gitlab.Commit) (res []*ProjectWithCommits) {
 		}
 		projectsWithCommits[c.ProjectID] = append(projectsWithCommits[c.ProjectID], c)
 	}
-	projectsMap := fetchProjectsMap()
+	projectsMap := fetchProjectsMap(nil) // TODO
 	for pid, commits := range projectsWithCommits {
 		res = append(res, &ProjectWithCommits{projectsMap[pid], commits})
 	}
