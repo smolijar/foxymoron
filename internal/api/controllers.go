@@ -6,7 +6,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/grissius/foxymoron/internal/core"
-	"github.com/xanzy/go-gitlab"
 )
 
 func parseIsoDate(date string) time.Time {
@@ -27,7 +26,7 @@ func parseIsoDate(date string) time.Time {
 // @Security ApiKey
 // @Security GitLabURL
 func getProjectsController(c *gin.Context) {
-	projects := core.FetchProjects(c.MustGet("client").(*gitlab.Client))
+	projects := core.FetchProjects(getClient(c))
 	c.JSON(200, projects)
 }
 
@@ -43,7 +42,7 @@ func getCommitsController(c *gin.Context) {
 	from := parseIsoDate(c.Query("from"))
 	to := parseIsoDate(c.Query("to"))
 	message, _ := regexp.Compile(c.Query("message"))
-	commits := core.FetchCommits(c.MustGet("client").(*gitlab.Client), &core.FetchCommitsOptions{From: &from, To: &to, WithStats: true, MessageRegex: message})
+	commits := core.FetchCommits(getClient(c), &core.FetchCommitsOptions{From: &from, To: &to, WithStats: true, MessageRegex: message})
 	c.JSON(200, commits)
 }
 
@@ -58,7 +57,7 @@ func getCommitsController(c *gin.Context) {
 func getStatisticsController(c *gin.Context) {
 	from := parseIsoDate(c.Query("from"))
 	to := parseIsoDate(c.Query("to"))
-	stats := core.CommitsToStats(core.FetchCommits(c.MustGet("client").(*gitlab.Client), &core.FetchCommitsOptions{From: &from, To: &to, WithStats: true, MessageRegex: nil}))
+	stats := core.CommitsToStats(core.FetchCommits(getClient(c), &core.FetchCommitsOptions{From: &from, To: &to, WithStats: true, MessageRegex: nil}))
 
 	c.JSON(200, stats)
 }
