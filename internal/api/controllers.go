@@ -21,7 +21,7 @@ func parseIsoDate(date string) time.Time {
 // @Tags Projects
 // @Summary List all available unarchived projects
 // @Produce json
-// @Success 200 {array} gitlab.Project
+// @Success 200 {array} core.Project
 // @Router /projects [get]
 // @Security ApiKey
 // @Security GitLabURL

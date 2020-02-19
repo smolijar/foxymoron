@@ -52,44 +52,45 @@ func FetchCommits(client *gitlab.Client, opts *FetchCommitsOptions) []*gitlab.Co
 	return commits
 }
 
-func FetchProjects(client *gitlab.Client) (res []*gitlab.Project) {
+func FetchProjects(client *gitlab.Client) (res []*Project) {
 	for _, project := range fetchProjectsMap(client) {
 		res = append(res, project)
 	}
 	return
 }
 
-func fetchProjectsMap(client *gitlab.Client) map[int]*gitlab.Project {
-	projectsMap := map[int]*gitlab.Project{}
-	maxPage := 1
+func fetchProjectsMap(client *gitlab.Client) map[int]*Project {
+	maxPage := 0
+	projectsMap := make(map[int]*Project)
 	projectsChannel := make(chan []*gitlab.Project)
-	collectResults := func() {
+	maxPageChan := make(chan int)
+	getProjectPage := func(currentPage int) {
+		log.Printf("Making project list request %v / %v", currentPage, maxPage)
+		ps, res, _ := client.Projects.ListProjects(&gitlab.ListProjectsOptions{
+			Simple: gitlab.Bool(true),
+			ListOptions: gitlab.ListOptions{
+				PerPage: 100,
+				Page:    currentPage,
+			},
+		})
+		// COOL: non-blocking write
+		select {
+		case maxPageChan <- res.TotalPages:
+		default:
+		}
+		projectsChannel <- ps
+	}
+	for page := 1; page == 1 || page <= maxPage; page++ {
+		go getProjectPage(page)
+		if page == 1 {
+			maxPage = <-maxPageChan
+		}
+	}
+	for page := 0; page < maxPage; page++ {
 		for _, p := range <-projectsChannel {
-			projectsMap[p.ID] = p
+			projectsMap[p.ID] = mapProject(p)
 		}
 	}
-	for p := 1; true; p++ {
-		go func(page int) {
-			log.Printf("Making project list request %v/%v\n", page, maxPage)
-			ps, res, _ := client.Projects.ListProjects(&gitlab.ListProjectsOptions{
-				Archived: gitlab.Bool(false),
-				ListOptions: gitlab.ListOptions{
-					PerPage: 100,
-					Page:    page,
-				},
-			})
-			maxPage = res.TotalPages
-			projectsChannel <- ps
-		}(p)
-		if p == 1 {
-			collectResults()
-		}
-		if p >= maxPage {
-			break
-		}
-
-	}
-	collectResults()
 	log.Printf("Fetched %v projects from GitLab", len(projectsMap))
 	return projectsMap
 }
