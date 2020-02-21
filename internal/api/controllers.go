@@ -61,3 +61,10 @@ func getStatisticsController(c *gin.Context) {
 
 	c.JSON(200, stats)
 }
+
+func root(c *gin.Context) {
+	c.JSON(200, struct {
+		Now               time.Time
+		WhatDoesTheFoxSay string
+	}{time.Now(), "🦊"})
+}

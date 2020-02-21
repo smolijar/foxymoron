@@ -30,6 +30,7 @@ import (
 // @name X-Gitlab-Url
 func createEngine() *gin.Engine {
 	r := gin.Default()
+	r.GET("/", root)
 	r.GET("/docs/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	r.Use(authMdw)
