@@ -28,22 +28,29 @@ func FetchCommits(user *User, opts *FetchCommitsOptions) []*gitlab.Commit {
 		All:       gitlab.Bool(opts.WithStats),
 		WithStats: gitlab.Bool(true),
 	}
+	requests := 0
+	bound := make(map[int]bool)
 	projects := fetchProjectsMap(user)
 	commitsChan := make(chan []*gitlab.Commit)
 	for _, p := range projects {
+		if p.LastActivityAt.Before(*opts.From) || p.CreatedAt.After(*opts.To) {
+			continue
+		}
 		proj := p
+		requests++
 		// COOL: create ad-hoc blocking-to-async functions
 		go func() {
 			commits, _, _ := user.Client.Commits.ListCommits(proj.ID, opt)
 			for _, c := range commits {
 				c.ProjectID = proj.ID
+				bound[c.ProjectID] = true
 			}
 			commitsChan <- commits
 		}()
 	}
 	commits := []*gitlab.Commit{}
 	retrievedCommitsN := 0
-	for i := 0; i < len(projects); i++ {
+	for i := 0; i < requests; i++ {
 		retrievedCommitsN++
 		// COOL: use `<-commitsChan` like an expression without assignment
 		for _, c := range <-commitsChan {
