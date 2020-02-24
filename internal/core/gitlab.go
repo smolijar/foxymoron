@@ -8,6 +8,12 @@ import (
 	"github.com/xanzy/go-gitlab"
 )
 
+type User struct {
+	GitLabURL string
+	ApiKey    string
+	Client    *gitlab.Client
+}
+
 type FetchCommitsOptions struct {
 	From         *time.Time
 	To           *time.Time
@@ -15,20 +21,20 @@ type FetchCommitsOptions struct {
 	MessageRegex *regexp.Regexp
 }
 
-func FetchCommits(client *gitlab.Client, opts *FetchCommitsOptions) []*gitlab.Commit {
+func FetchCommits(user *User, opts *FetchCommitsOptions) []*gitlab.Commit {
 	opt := &gitlab.ListCommitsOptions{
 		Since:     opts.From,
 		Until:     opts.To,
 		All:       gitlab.Bool(opts.WithStats),
 		WithStats: gitlab.Bool(true),
 	}
-	projects := fetchProjectsMap(client)
+	projects := fetchProjectsMap(user)
 	commitsChan := make(chan []*gitlab.Commit)
 	for _, p := range projects {
 		proj := p
 		// COOL: create ad-hoc blocking-to-async functions
 		go func() {
-			commits, _, _ := client.Commits.ListCommits(proj.ID, opt)
+			commits, _, _ := user.Client.Commits.ListCommits(proj.ID, opt)
 			for _, c := range commits {
 				c.ProjectID = proj.ID
 			}
@@ -49,24 +55,25 @@ func FetchCommits(client *gitlab.Client, opts *FetchCommitsOptions) []*gitlab.Co
 	// COOL: you can use default logger from `log` and it outputs by default `2020/01/11 17:35:28 Retireved ...`
 	// COOL: you can use %v for default formatting
 	log.Printf("Returning %v commits - Filtered from %v retrieved commits from %v projects for range <%v, %v>", retrievedCommitsN, len(commits), len(projects), opts.From, opts.To)
+	log.Println("GitLab request stats: %d (all projects) > %d (requests) > %d (lower bound for requests)", len(projects), requests, len(bound))
 	return commits
 }
 
-func FetchProjects(client *gitlab.Client) (res []*Project) {
-	for _, project := range fetchProjectsMap(client) {
+func FetchProjects(user *User) (res []*Project) {
+	for _, project := range fetchProjectsMap(user) {
 		res = append(res, project)
 	}
 	return
 }
 
-func fetchProjectsMap(client *gitlab.Client) map[int]*Project {
+func fetchProjectsMap(user *User) map[int]*Project {
 	maxPage := 0
 	projectsMap := make(map[int]*Project)
 	projectsChannel := make(chan []*gitlab.Project)
 	maxPageChan := make(chan int)
 	getProjectPage := func(currentPage int) {
 		log.Printf("Making project list request %v / %v", currentPage, maxPage)
-		ps, res, _ := client.Projects.ListProjects(&gitlab.ListProjectsOptions{
+		ps, res, _ := user.Client.Projects.ListProjects(&gitlab.ListProjectsOptions{
 			Simple: gitlab.Bool(true),
 			ListOptions: gitlab.ListOptions{
 				PerPage: 100,

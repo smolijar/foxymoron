@@ -3,11 +3,10 @@ package api
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/grissius/foxymoron/internal/core"
-	"github.com/xanzy/go-gitlab"
 )
 
-func getClient(c *gin.Context) *gitlab.Client {
-	return c.MustGet("client").(*gitlab.Client)
+func getUser(c *gin.Context) *core.User {
+	return c.MustGet("user").(*core.User)
 }
 
 func authMdw(c *gin.Context) {
@@ -16,5 +15,5 @@ func authMdw(c *gin.Context) {
 	if authorization == "" || gitlabUrl == "" {
 		c.AbortWithStatus(401)
 	}
-	c.Set("client", core.CreateClient(&authorization, &gitlabUrl))
+	c.Set("user", &core.User{gitlabUrl, authorization, core.CreateClient(&authorization, &gitlabUrl)})
 }
