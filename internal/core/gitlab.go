@@ -9,9 +9,10 @@ import (
 )
 
 type User struct {
-	GitLabURL string
-	ApiKey    string
-	Client    *gitlab.Client
+	GitLabURL   string
+	ApiKey      string
+	Client      *gitlab.Client
+	ProjectsMap map[int]*Project
 }
 
 type FetchCommitsOptions struct {
@@ -30,7 +31,7 @@ func FetchCommits(user *User, opts *FetchCommitsOptions) []*gitlab.Commit {
 	}
 	requests := 0
 	bound := make(map[int]bool)
-	projects := fetchProjectsMap(user)
+	projects := user.ProjectsMap
 	commitsChan := make(chan []*gitlab.Commit)
 	for _, p := range projects {
 		if p.LastActivityAt.Before(*opts.From) || p.CreatedAt.After(*opts.To) {
@@ -63,13 +64,13 @@ func FetchCommits(user *User, opts *FetchCommitsOptions) []*gitlab.Commit {
 }
 
 func FetchProjects(user *User) (res []*Project) {
-	for _, project := range fetchProjectsMap(user) {
+	for _, project := range user.ProjectsMap {
 		res = append(res, project)
 	}
 	return
 }
 
-func fetchProjectsMap(user *User) map[int]*Project {
+func FetchProjectsMap(user *User) map[int]*Project {
 	maxPage := 0
 	projectsMap := make(map[int]*Project)
 	projectsChannel := make(chan []*gitlab.Project)
