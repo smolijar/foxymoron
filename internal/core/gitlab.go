@@ -38,7 +38,6 @@ func FetchCommits(user *User, opts *FetchCommitsOptions) []*gitlab.Commit {
 		}
 		proj := p
 		requests++
-		// COOL: create ad-hoc blocking-to-async functions
 		go func() {
 			commits, _, _ := user.Client.Commits.ListCommits(proj.ID, opt)
 			for _, c := range commits {
@@ -52,15 +51,12 @@ func FetchCommits(user *User, opts *FetchCommitsOptions) []*gitlab.Commit {
 	retrievedCommitsN := 0
 	for i := 0; i < requests; i++ {
 		retrievedCommitsN++
-		// COOL: use `<-commitsChan` like an expression without assignment
 		for _, c := range <-commitsChan {
 			if opts.MessageRegex == nil || opts.MessageRegex.MatchString(c.Message) {
 				commits = append(commits, c)
 			}
 		}
 	}
-	// COOL: you can use default logger from `log` and it outputs by default `2020/01/11 17:35:28 Retireved ...`
-	// COOL: you can use %v for default formatting
 	log.Printf("Returning %v commits - Filtered from %v retrieved commits from %v projects for range <%v, %v>", retrievedCommitsN, len(commits), len(projects), opts.From, opts.To)
 	log.Println("GitLab request stats: %d (all projects) > %d (requests) > %d (lower bound for requests)", len(projects), requests, len(bound))
 	return commits
@@ -87,7 +83,6 @@ func fetchProjectsMap(user *User) map[int]*Project {
 				Page:    currentPage,
 			},
 		})
-		// COOL: non-blocking write
 		select {
 		case maxPageChan <- res.TotalPages:
 		default:

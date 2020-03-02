@@ -16,12 +16,10 @@ func LoadConfig() {
 	if err == nil {
 		defaultPort = envPort
 	}
-	// COOL: having built in param parsing is just cool
 	port := flag.Int("port", defaultPort, "Local server port")
 	help := flag.Bool("help", false, "Print help")
 	flag.Parse()
 	if *help == true {
-		// COOL: print flag usage
 		flag.PrintDefaults()
 		os.Exit(0)
 	}
