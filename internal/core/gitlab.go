@@ -30,6 +30,7 @@ func FetchCommits(user *User, opts *FetchCommitsOptions) []*gitlab.Commit {
 		WithStats: gitlab.Bool(true),
 	}
 	requests := 0
+	requestsFinished := 0
 	bound := make(map[int]bool)
 	projects := user.ProjectsMap
 	commitsChan := make(chan []*gitlab.Commit)
@@ -46,20 +47,22 @@ func FetchCommits(user *User, opts *FetchCommitsOptions) []*gitlab.Commit {
 				bound[c.ProjectID] = true
 			}
 			commitsChan <- commits
+			requestsFinished++
+			log.Printf("Finished commit list request %d/%d", requestsFinished, requests)
 		}()
 	}
 	commits := []*gitlab.Commit{}
 	retrievedCommitsN := 0
 	for i := 0; i < requests; i++ {
-		retrievedCommitsN++
 		for _, c := range <-commitsChan {
+			retrievedCommitsN++
 			if opts.MessageRegex == nil || opts.MessageRegex.MatchString(c.Message) {
 				commits = append(commits, c)
 			}
 		}
 	}
 	log.Printf("Returning %v commits - Filtered from %v retrieved commits from %v projects for range <%v, %v>", retrievedCommitsN, len(commits), len(projects), opts.From, opts.To)
-	log.Println("GitLab request stats: %d (all projects) > %d (requests) > %d (lower bound for requests)", len(projects), requests, len(bound))
+	log.Printf("GitLab request stats: %d (all projects) > %d (requests) > %d (lower bound for requests)", len(projects), requests, len(bound))
 	return commits
 }
 
