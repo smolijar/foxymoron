@@ -1,9 +1,8 @@
 package core
 
 import (
-	"log"
 	"regexp"
-	"sort"
+	"strings"
 
 	"github.com/grissius/foxymoron/pkg/gitmoji"
 	"github.com/xanzy/go-gitlab"
@@ -29,48 +28,61 @@ func groupByProject(projectsMap map[int]*gitlab.Project, commits []*gitlab.Commi
 }
 
 type Stats struct {
-	Count          int
-	MergeCommits   int
-	RefsPrefixes   map[string]int
-	Issues         map[string]int
-	Openers        map[string]int
-	WithReferences int
-	WithGitmoji    int
+	Count       int
+	Types       map[string]int
+	Issues      *Occurences
+	Gitmoji     *Occurences
+	IssuePrefix *Occurences
+}
+
+func isMergeCommit(commit *gitlab.Commit) bool {
+	return len(commit.ParentIDs) > 1
+}
+
+func isSuggestion(commit *gitlab.Commit) bool {
+	matcher := regexp.MustCompile(`^Apply suggestion to .*`)
+	return matcher.MatchString(commit.Title)
+}
+
+func isRevert(commit *gitlab.Commit) bool {
+	matcher := regexp.MustCompile(`^Revert ".*`)
+	return matcher.MatchString(commit.Title)
+}
+
+type Occurences struct {
+	Count      int
+	Occurences map[string]int
+}
+
+func countOccurences(commit *gitlab.Commit, pattern *regexp.Regexp, result *Occurences) {
+	matches := pattern.FindStringSubmatch(commit.Message)
+	if matches != nil && len(matches) > 0 {
+		opener := matches[1]
+		result.Occurences[opener] = result.Occurences[opener] + 1
+		result.Count++
+	}
 }
 
 func CommitsToStats(commits []*gitlab.Commit) (stats Stats) {
 	gitmojis, _ := gitmoji.Fetch()
 	stats.Count = len(commits)
-	stats.RefsPrefixes = map[string]int{}
-	stats.Issues = map[string]int{}
-	stats.Openers = map[string]int{}
-	refernceMatcher := regexp.MustCompile(`^|\n(.+)(#[0-9]+)`)
-	openerMatcher := regexp.MustCompile(`^(\S+)\s`)
+	stats.Types = map[string]int{"merge": 0, "suggestion": 0, "revert": 0, "human": 0}
+	stats.Issues = &Occurences{Occurences: map[string]int{}}
+	stats.IssuePrefix = &Occurences{Occurences: map[string]int{}}
+	stats.Gitmoji = &Occurences{Occurences: map[string]int{}}
 	for _, c := range commits {
-		stats.Count++
-		if len(c.ParentIDs) > 1 {
-			stats.MergeCommits++
+		if isMergeCommit(c) {
+			stats.Types["merge"]++
+		} else if isSuggestion(c) {
+			stats.Types["suggestion"]++
+		} else if isRevert(c) {
+			stats.Types["revert"]++
+		} else {
+			stats.Types["human"]++
+			countOccurences(c, regexp.MustCompile(`(?:^|\n)[^\n]*(#[0-9]+)`), stats.Issues)
+			countOccurences(c, regexp.MustCompile(`(?:^|\n)([^\n]*)#[0-9]+`), stats.IssuePrefix)
+			countOccurences(c, regexp.MustCompile("^("+strings.Join(gitmojis, "|")+").*"), stats.Gitmoji)
 		}
-		refs := refernceMatcher.FindAllStringSubmatch(c.Message, -1)
-		if refs != nil && len(refs) > 1 && len(refs[1]) > 2 {
-			prefix := refs[1][1]
-			stats.RefsPrefixes[prefix]++
-			stats.WithReferences++
-			issue := refs[1][2]
-			stats.Issues[issue]++
-			log.Println(prefix, issue)
-		}
-
-		openers := openerMatcher.FindAllStringSubmatch(c.Message, -1)
-		if openers != nil && len(openers) > 0 && len(openers[0]) > 1 {
-			opener := openers[0][1]
-			stats.Openers[opener]++
-			i := sort.SearchStrings(gitmojis, opener)
-			if i < len(gitmojis) && gitmojis[i] == opener {
-				stats.WithGitmoji++
-			}
-		}
-
 	}
 	return
 }
