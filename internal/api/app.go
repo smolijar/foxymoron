@@ -18,7 +18,7 @@ import (
 
 // @license.name MIT
 
-// @host localhost:8000
+// @host foxymoron.appspot.com
 // @BasePath /
 
 // @securityDefinitions.apikey ApiKey
@@ -33,11 +33,13 @@ func createEngine() *gin.Engine {
 	r.GET("/", root)
 	r.GET("/docs/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
-	r.Use(authMdw)
-
-	r.GET("/projects", getProjectsController)
-	r.GET("/commits", getCommitsController)
-	r.GET("/statistics", getStatisticsController)
+	proxy := r.Group("/")
+	proxy.Use(authMdw)
+	{
+		proxy.GET("/projects", getProjectsController)
+		proxy.GET("/commits", getCommitsController)
+		proxy.GET("/statistics", getStatisticsController)
+	}
 	return r
 }
 

@@ -1,25 +1,15 @@
 package api
 
 import (
-	"regexp"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/grissius/foxymoron/internal/core"
 )
 
-func parseIsoDate(date string) time.Time {
-	t, err := time.Parse(time.RFC3339, date)
-
-	if err != nil {
-		return time.Now()
-	}
-	return t
-}
-
 // List projects
 // @Tags Projects
-// @Summary List all available unarchived projects
+// @Summary List all available projects
 // @Produce json
 // @Success 200 {array} core.Project
 // @Router /projects [get]
@@ -36,13 +26,13 @@ func getProjectsController(c *gin.Context) {
 // @Produce json
 // @Success 200 {array} gitlab.Commit
 // @Router /commits [get]
+// @Param from query string false "Include only commits newer than this, e.g. `2020-02-19T00:00:00.000Z`"
+// @Param to query string false "Include only commits older than this, e.g. `2020-02-20T00:00:00.000Z`"
+// @Param message query string false "Pass only commits matching this regex pattern, e.g. `foo|bar`"
 // @Security ApiKey
 // @Security GitLabURL
 func getCommitsController(c *gin.Context) {
-	from := parseIsoDate(c.Query("from"))
-	to := parseIsoDate(c.Query("to"))
-	message, _ := regexp.Compile(c.Query("message"))
-	commits := core.FetchCommits(getUser(c), &core.FetchCommitsOptions{From: &from, To: &to, WithStats: true, MessageRegex: message})
+	commits := core.FetchCommits(getUser(c), parseCommitOptions(c))
 	c.JSON(200, commits)
 }
 
@@ -52,12 +42,13 @@ func getCommitsController(c *gin.Context) {
 // @Produce json
 // @Success 200 {array} core.Stats
 // @Router /statistics [get]
+// @Param from query string false "Include only commits newer than this, e.g. `2020-02-19T00:00:00.000Z`"
+// @Param to query string false "Include only commits older than this, e.g. `2020-02-20T00:00:00.000Z`"
+// @Param message query string false "Pass only commits matching this regex pattern, e.g. `foo|bar`"
 // @Security ApiKey
 // @Security GitLabURL
 func getStatisticsController(c *gin.Context) {
-	from := parseIsoDate(c.Query("from"))
-	to := parseIsoDate(c.Query("to"))
-	stats := core.CommitsToStats(core.FetchCommits(getUser(c), &core.FetchCommitsOptions{From: &from, To: &to, WithStats: true, MessageRegex: nil}))
+	stats := core.CommitsToStats(core.FetchCommits(getUser(c), parseCommitOptions(c)))
 
 	c.JSON(200, stats)
 }
