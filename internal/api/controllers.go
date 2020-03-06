@@ -1,6 +1,7 @@
 package api
 
 import (
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -45,10 +46,17 @@ func getCommitsController(c *gin.Context) {
 // @Param from query string false "Include only commits newer than this, e.g. `2020-02-19T00:00:00.000Z`"
 // @Param to query string false "Include only commits older than this, e.g. `2020-02-20T00:00:00.000Z`"
 // @Param message query string false "Pass only commits matching this regex pattern, e.g. `foo|bar`"
+// @Param mode query int false "Group by nothing (0), project (1), namespace (2)"
 // @Security ApiKey
 // @Security GitLabURL
 func getStatisticsController(c *gin.Context) {
-	stats := core.CommitsToStats(core.FetchCommits(getUser(c), parseCommitOptions(c)))
+	user := getUser(c)
+	mode := 0
+	stringMode, ok := c.GetQuery("mode")
+	if ok {
+		mode, _ = strconv.Atoi(stringMode)
+	}
+	stats := core.CommitsToBuckets(core.FetchCommits(user, parseCommitOptions(c)), user.ProjectsMap, mode)
 
 	c.JSON(200, stats)
 }
