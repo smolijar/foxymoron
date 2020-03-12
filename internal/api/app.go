@@ -6,10 +6,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/gin-contrib/cors"
+	_ "github.com/grissius/foxymoron/api"
 	ginSwagger "github.com/swaggo/gin-swagger"
 	"github.com/swaggo/gin-swagger/swaggerFiles"
-
-	_ "github.com/grissius/foxymoron/api"
 )
 
 // @title Foxymoron REST API
@@ -30,6 +30,10 @@ import (
 // @name X-Gitlab-Url
 func createEngine() *gin.Engine {
 	r := gin.Default()
+	config := cors.DefaultConfig()
+	config.AllowOrigins = []string{"*"}
+	config.AddAllowHeaders("*")
+	r.Use(cors.New(config))
 	r.GET("/", root)
 	r.GET("/docs/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
